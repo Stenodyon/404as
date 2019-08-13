@@ -80,6 +80,7 @@ const AsmBuffer = struct {
             shifted <<= 4;
         }
         self.data.items[self.data.len - 1] |= shifted;
+        self.location += 1;
     }
 
     pub fn write_address(
@@ -155,8 +156,8 @@ pub fn assemble(
                 .MOV, .ADD, .NAND => |reg_pair| {
                     const AA: u8 = @enumToInt(reg_pair.a);
                     const BB: u8 = @enumToInt(reg_pair.b);
-                    try buffer.write_nibble(AA);
-                    try buffer.write_nibble(BB);
+                    const value = AA << 2 | BB;
+                    try buffer.write_nibble(value);
                 },
                 .JMP, .JZ, .JC => |address| {
                     switch (address) {
