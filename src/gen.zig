@@ -15,7 +15,7 @@ pub const Register = enum {
 
 pub const Address = union(enum) {
     Value: usize,
-    Label: []const u8,
+    Label: LabelDecl,
 };
 
 pub const RegisterPair = struct {
@@ -90,14 +90,14 @@ const AsmBuffer = struct {
     ) void {
         const byte_id = location >> 1;
         if (location % 2 == 0) { // first nibble is upper
-            self.data.items[byte_id] = value >> 4;
+            self.data.items[byte_id] = @intCast(u8, value >> 4);
             const low = (value & 0x00F) << 4;
             self.data.items[byte_id + 1] &= 0x0F;
-            self.data.items[byte_id + 1] |= value;
+            self.data.items[byte_id + 1] |= @intCast(u8, value);
         } else { // first nibble is lower
             self.data.items[byte_id] &= 0xF0;
-            self.data.items[byte_id] |= value >> 8;
-            self.data.items[byte_id + 1] = value & 0xFF;
+            self.data.items[byte_id] |= @intCast(u8, value >> 8);
+            self.data.items[byte_id + 1] = @intCast(u8, value & 0xFF);
         }
     }
 };
@@ -130,7 +130,7 @@ pub fn assemble(
     defer allocator.free(statements);
     var buffer = AsmBuffer.init(allocator);
     var label_locations = AutoHashMap([]const u8, usize).init(allocator);
-    var label_to_fill = AutoHashMap([]const u8, usize).init(allocator);
+    var label_to_fill = AutoHashMap(usize, LabelDecl).init(allocator);
     defer {
         label_to_fill.deinit();
         label_locations.deinit();
@@ -169,8 +169,11 @@ pub fn assemble(
                             try buffer.write_nibble(@intCast(u8, A1));
                             try buffer.write_nibble(@intCast(u8, A0));
                         },
-                        .Label => |label| {
-                            _ = try label_to_fill.put(label, buffer.location);
+                        .Label => |label_decl| {
+                            _ = try label_to_fill.put(
+                                buffer.location,
+                                label_decl,
+                            );
                             try buffer.write_nibble(0);
                             try buffer.write_nibble(0);
                             try buffer.write_nibble(0);
@@ -180,6 +183,16 @@ pub fn assemble(
                 else => {},
             }
         }
+    }
+
+    var fill_iterator = label_to_fill.iterator();
+    while (fill_iterator.next()) |entry| {
+        const fill_loc = entry.key;
+        const label_decl = entry.value;
+        const loc_entry = label_locations.get(label_decl.label) orelse {
+            fail(label_decl.loc, "undeclared label \"{}\"\n", label_decl.label);
+        };
+        buffer.write_address(loc_entry.value, fill_loc);
     }
 
     return buffer.data.toOwnedSlice();

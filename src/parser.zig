@@ -16,7 +16,7 @@ fn streqi(comptime base: []const u8, b: []const u8) bool {
     return true;
 }
 
-fn fail(loc: SourceLoc, comptime fmt: []const u8, args: ...) noreturn {
+pub fn fail(loc: SourceLoc, comptime fmt: []const u8, args: ...) noreturn {
     std.debug.warn("{}:{}:{} error: ", loc.filename, loc.row, loc.col);
     std.debug.warn(fmt, args);
     std.process.exit(1);
@@ -134,7 +134,12 @@ const ParseContext = struct {
         if (token.id == .Number) {
             return Address{ .Value = token.number_value };
         } else if (token.id == .Symbol) {
-            return Address{ .Label = token.contents };
+            return Address{
+                .Label = LabelDecl{
+                    .loc = token.loc,
+                    .label = token.contents,
+                },
+            };
         }
         fail(
             token.loc,
