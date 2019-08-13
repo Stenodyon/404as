@@ -6,7 +6,7 @@ This assembler was created for my fictional CPU, the 404.
 
 ```asm
 ; Comments start with a semicolon
-loop:        ; labels are defined with a comma
+loop:        ; labels are defined with a colon
 
     LDI 0    ; the assembler supports decimal, hex (0x..) and binary (0b..) literals
     MOV A, B ; moves A to B
