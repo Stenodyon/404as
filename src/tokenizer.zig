@@ -13,16 +13,17 @@ pub const SourceLoc = struct {
     pub fn init(filename: []const u8) SourceLoc {
         return SourceLoc{
             .filename = filename,
-            .row = 0,
+            .row = 1,
             .col = 0,
         };
     }
 };
 
-pub const TokenId = union(enum) {
+pub const TokenId = enum {
     Comma,
     Colon,
     Symbol,
+    Number,
     Comment,
     Newline,
 };
@@ -31,6 +32,7 @@ pub const Token = struct {
     id: TokenId,
     loc: SourceLoc,
     contents: []const u8,
+    number_value: usize,
 
     pub fn debug_print(token: *Token) void {
         std.debug.warn("{}(\"{}\")", @tagName(token.id), token.contents);
@@ -41,6 +43,10 @@ const TokenizeState = enum {
     Start,
     Symbol,
     Comment,
+    Zero, // leading 0
+    Number,
+    BinNumber,
+    HexNumber,
 };
 
 const Tokenize = struct {
@@ -51,6 +57,7 @@ const Tokenize = struct {
     tokens: ArrayList(Token),
     prevPos: usize,
     beginPos: usize,
+    number_value: usize,
 
     pub fn init(
         allocator: *Allocator,
@@ -65,6 +72,7 @@ const Tokenize = struct {
             .tokens = ArrayList(Token).init(allocator),
             .prevPos = 0,
             .beginPos = 0,
+            .number_value = 0,
         };
     }
 
@@ -75,6 +83,7 @@ const Tokenize = struct {
     }
 
     pub fn revert_char(self: *Tokenize) void {
+        self.loc.col -= 1;
         self.iter.i = self.prevPos;
     }
 
@@ -83,6 +92,7 @@ const Tokenize = struct {
             .id = id,
             .loc = self.loc,
             .contents = [_]u8{},
+            .number_value = 0,
         });
         self.beginPos = self.prevPos;
     }
@@ -90,6 +100,9 @@ const Tokenize = struct {
     pub fn end_token(self: *Tokenize) void {
         var token = &self.tokens.items[self.tokens.len - 1];
         token.contents = self.source[self.beginPos..self.iter.i];
+        if (token.id == .Number) {
+            token.number_value = self.number_value;
+        }
     }
 
     pub fn newline(self: *Tokenize) void {
@@ -130,6 +143,15 @@ pub fn tokenize(
                         try t.begin_token(.Symbol);
                         t.state = .Symbol;
                     },
+                    '0' => {
+                        try t.begin_token(.Number);
+                        t.state = .Zero;
+                    },
+                    '1'...'9' => {
+                        try t.begin_token(.Number);
+                        t.state = .Number;
+                        t.number_value = c - '0';
+                    },
                     ';' => {
                         try t.begin_token(.Comment);
                         t.state = .Comment;
@@ -167,6 +189,75 @@ pub fn tokenize(
                         t.state = .Start;
                     },
                     else => {},
+                }
+            },
+            .Zero => {
+                switch (c) {
+                    '0'...'9' => {
+                        t.state = .Number;
+                        t.number_value = c - '0';
+                    },
+                    'b' => {
+                        t.state = .BinNumber;
+                    },
+                    'x' => {
+                        t.state = .HexNumber;
+                    },
+                    else => {
+                        t.revert_char();
+                        t.end_token();
+                        t.state = .Start;
+                    },
+                }
+            },
+            .Number => {
+                switch (c) {
+                    '0'...'9' => {
+                        t.number_value *= 10;
+                        t.number_value += c - '0';
+                    },
+                    '_' => {},
+                    else => {
+                        t.revert_char();
+                        t.end_token();
+                        t.state = .Start;
+                    },
+                }
+            },
+            .BinNumber => {
+                switch (c) {
+                    '0', '1' => {
+                        t.number_value <<= 2;
+                        t.number_value += c - '0';
+                    },
+                    '_' => {},
+                    else => {
+                        t.revert_char();
+                        t.end_token();
+                        t.state = .Start;
+                    },
+                }
+            },
+            .HexNumber => {
+                switch (c) {
+                    '0'...'9' => {
+                        t.number_value *= 16;
+                        t.number_value += c - '0';
+                    },
+                    'a'...'f' => {
+                        t.number_value *= 16;
+                        t.number_value += c - 'a';
+                    },
+                    'A'...'F' => {
+                        t.number_value *= 16;
+                        t.number_value += c - 'A';
+                    },
+                    '_' => {},
+                    else => {
+                        t.revert_char();
+                        t.end_token();
+                        t.state = .Start;
+                    },
                 }
             },
         }
