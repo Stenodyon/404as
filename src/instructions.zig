@@ -1,0 +1,16 @@
+pub const InstructionId = enum {
+    NOP,
+    LDI,
+    LOD,
+    STR,
+    SAR,
+    SAP,
+    MOV,
+    CLC,
+    JMP,
+    RJP,
+    JZ,
+    JC,
+    ADD,
+    NAND,
+};
