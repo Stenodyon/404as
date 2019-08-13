@@ -84,11 +84,11 @@ const Tokenize = struct {
             .loc = self.loc,
             .contents = [_]u8{},
         });
-        self.beginPos = self.iter.i;
+        self.beginPos = self.prevPos;
     }
 
     pub fn end_token(self: *Tokenize) void {
-        var token = &self.tokens.at(self.tokens.count() - 1);
+        var token = &self.tokens.items[self.tokens.len - 1];
         token.contents = self.source[self.beginPos..self.iter.i];
     }
 
@@ -153,8 +153,8 @@ pub fn tokenize(
                 switch (c) {
                     'a'...'z', 'A'...'Z', '0'...'9', '_' => {},
                     else => {
-                        t.end_token();
                         t.revert_char();
+                        t.end_token();
                         t.state = .Start;
                     },
                 }
@@ -162,8 +162,8 @@ pub fn tokenize(
             .Comment => {
                 switch (c) {
                     '\n' => {
-                        t.end_token();
                         t.revert_char();
+                        t.end_token();
                         t.state = .Start;
                     },
                     else => {},
