@@ -26,6 +26,17 @@ pub const TokenId = enum {
     Number,
     Comment,
     Newline,
+
+    pub fn to_string(self: TokenId) []const u8 {
+        switch (self) {
+            .Comma => return "COMMA",
+            .Colon => return "COLON",
+            .Symbol => return "SYMBOL",
+            .Number => return "NUMBER",
+            .Comment => return "COMMENT",
+            .Newline => return "NEWLINE",
+        }
+    }
 };
 
 pub const Token = struct {
@@ -112,7 +123,7 @@ const Tokenize = struct {
 
     pub fn fail(self: *Tokenize, comptime fmt: []const u8, args: ...) void {
         std.debug.warn(
-            "{}:{}:{}: ",
+            "{}:{}:{} error: ",
             self.loc.filename,
             self.loc.row,
             self.loc.col,
@@ -167,7 +178,7 @@ pub fn tokenize(
                     else => {
                         var buffer: [@sizeOf(u32)]u8 = undefined;
                         const size = try std.unicode.utf8Encode(c, buffer[0..]);
-                        t.fail("Invalid character '{}'\n", buffer[0..size]);
+                        t.fail("invalid character '{}'\n", buffer[0..size]);
                     },
                 }
             },
