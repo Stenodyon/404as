@@ -38,7 +38,7 @@ const AsmBuffer = struct {
             self.data.items[byte_id] = @intCast(u8, value >> 4);
             const low = (value & 0x00F) << 4;
             self.data.items[byte_id + 1] &= 0x0F;
-            self.data.items[byte_id + 1] |= @intCast(u8, value);
+            self.data.items[byte_id + 1] |= @intCast(u8, low);
         } else { // first nibble is lower
             self.data.items[byte_id] &= 0xF0;
             self.data.items[byte_id] |= @intCast(u8, value >> 8);
@@ -46,6 +46,50 @@ const AsmBuffer = struct {
         }
     }
 };
+
+test "AsmBuffer.write_address upper" {
+    var buffer = AsmBuffer.init(std.debug.global_allocator);
+    {
+        var i: usize = 4;
+        while (i > 0) : (i -= 1) {
+            try buffer.write_nibble(0);
+        }
+    }
+
+    buffer.write_address(0x123, 0);
+    if (buffer.data.len != 2) {
+        std.debug.panic("buffer.data.len = {} != 2\n", buffer.data.len);
+    }
+    if (buffer.data.at(0) != 0x12 or buffer.data.at(1) != 0x30) {
+        std.debug.panic(
+            "buffer was [{}, {}], expected [18, 48]\n",
+            buffer.data.at(0),
+            buffer.data.at(1),
+        );
+    }
+}
+
+test "AsmBuffer.write_address lower" {
+    var buffer = AsmBuffer.init(std.debug.global_allocator);
+    {
+        var i: usize = 4;
+        while (i > 0) : (i -= 1) {
+            try buffer.write_nibble(0);
+        }
+    }
+
+    buffer.write_address(0x123, 1);
+    if (buffer.data.len != 2) {
+        std.debug.panic("buffer.data.len = {} != 2\n", buffer.data.len);
+    }
+    if (buffer.data.at(0) != 0x01 or buffer.data.at(1) != 0x23) {
+        std.debug.panic(
+            "buffer was [{}, {}], expected [1, 35]\n",
+            buffer.data.at(0),
+            buffer.data.at(1),
+        );
+    }
+}
 
 fn get_opcode(instruction: Instruction) u8 {
     switch (instruction) {
