@@ -35,10 +35,9 @@ const AsmBuffer = struct {
     ) void {
         const byte_id = location >> 1;
         if (location % 2 == 0) { // first nibble is upper
-            self.data.items[byte_id] = @intCast(u8, value >> 4);
-            const low = (value & 0x00F) << 4;
+            self.data.items[byte_id] = @intCast(u8, (value & 0xFF0) >> 4);
             self.data.items[byte_id + 1] &= 0x0F;
-            self.data.items[byte_id + 1] |= @intCast(u8, low);
+            self.data.items[byte_id + 1] |= @intCast(u8, (value & 0x00F) << 4);
         } else { // first nibble is lower
             self.data.items[byte_id] &= 0xF0;
             self.data.items[byte_id] |= @intCast(u8, value >> 8);
