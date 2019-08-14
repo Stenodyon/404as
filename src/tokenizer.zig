@@ -3,21 +3,7 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const Utf8Iterator = std.unicode.Utf8Iterator;
 
-usingnamespace @import("instructions.zig");
-
-pub const SourceLoc = struct {
-    filename: []const u8,
-    row: usize,
-    col: usize,
-
-    pub fn init(filename: []const u8) SourceLoc {
-        return SourceLoc{
-            .filename = filename,
-            .row = 1,
-            .col = 0,
-        };
-    }
-};
+usingnamespace @import("utils.zig");
 
 pub const TokenId = enum {
     Comma,

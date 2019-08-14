@@ -3,24 +3,8 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 
 usingnamespace @import("tokenizer.zig");
-usingnamespace @import("gen.zig");
-
-fn streqi(comptime base: []const u8, b: []const u8) bool {
-    if (base.len != b.len) return false;
-    var i: usize = 0;
-    while (i < base.len) : (i += 1) {
-        if (base[i] != std.ascii.toUpper(b[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
-pub fn fail(loc: SourceLoc, comptime fmt: []const u8, args: ...) noreturn {
-    std.debug.warn("{}:{}:{} error: ", loc.filename, loc.row, loc.col);
-    std.debug.warn(fmt, args);
-    std.process.exit(1);
-}
+usingnamespace @import("architecture.zig");
+usingnamespace @import("utils.zig");
 
 pub const LabelDecl = struct {
     loc: SourceLoc,

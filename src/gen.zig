@@ -3,64 +3,9 @@ const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
 const AutoHashMap = std.AutoHashMap;
 
+usingnamespace @import("architecture.zig");
 usingnamespace @import("parser.zig");
-const SourceLoc = @import("tokenizer.zig").SourceLoc;
-
-pub const Register = enum {
-    A,
-    B,
-    C,
-    D,
-};
-
-pub const Address = union(enum) {
-    Value: usize,
-    Label: LabelDecl,
-};
-
-pub const RegisterPair = struct {
-    a: Register,
-    b: Register,
-};
-
-pub const nameof_Instruction = [_][]const u8{
-    "NOP",
-    "LDI",
-    "LOD",
-    "STR",
-    "SAR",
-    "SAP",
-    "MOV",
-    "CLC",
-    "JMP",
-    "RJP",
-    "JZ",
-    "JC",
-    "ADD",
-    "NAND",
-};
-
-pub const Instruction = union(enum) {
-    NOP,
-    LDI: usize,
-    LOD,
-    STR,
-    SAR,
-    SAP,
-    MOV: RegisterPair,
-    CLC,
-    JMP: Address,
-    RJP,
-    JZ: Address,
-    JC: Address,
-    ADD: RegisterPair,
-    NAND: RegisterPair,
-};
-
-fn warn(loc: SourceLoc, comptime fmt: []const u8, args: ...) void {
-    std.debug.warn("{}:{}:{} warning: ", loc.filename, loc.row, loc.col);
-    std.debug.warn(fmt, args);
-}
+usingnamespace @import("utils.zig");
 
 const AsmBuffer = struct {
     data: ArrayList(u8),
