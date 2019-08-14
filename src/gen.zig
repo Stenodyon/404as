@@ -121,6 +121,97 @@ fn get_opcode(instruction: Instruction) u8 {
     }
 }
 
+const Assemble = struct {
+    const LabelLocMap = AutoHashMap([]const u8, usize);
+
+    buffer: AsmBuffer,
+    label_locations: LabelLocMap,
+    label_to_fill: AutoHashMap(usize, LabelDecl),
+
+    pub fn init(allocator: *Allocator) Assemble {
+        return Assemble{
+            .buffer = AsmBuffer.init(allocator),
+            .label_locations = LabelLocMap.init(allocator),
+            .label_to_fill = AutoHashMap(usize, LabelDecl).init(allocator),
+        };
+    }
+
+    pub fn return_assembly(self: *Assemble) []u8 {
+        self.label_locations.deinit();
+        self.label_to_fill.deinit();
+        return self.buffer.data.toOwnedSlice();
+    }
+
+    pub fn mark_label(self: *Assemble, name: []const u8) !void {
+        _ = try self.label_locations.put(name, self.buffer.location);
+    }
+
+    pub fn fill_labels(self: *Assemble) void {
+        var fill_iterator = self.label_to_fill.iterator();
+        while (fill_iterator.next()) |entry| {
+            const fill_loc = entry.key;
+            const label_decl = entry.value;
+            const loc_entry = self.label_locations.get(label_decl.label) orelse {
+                fail(label_decl.loc, "undeclared label \"{}\"\n", label_decl.label);
+            };
+            self.buffer.write_address(loc_entry.value, fill_loc);
+        }
+    }
+
+    pub fn emit_immediate(self: *Assemble, value: usize) !void {
+        try self.buffer.write_nibble(@intCast(u8, value & 0xF));
+    }
+
+    pub fn emit_literal_address(self: *Assemble, address: usize) !void {
+        const A2 = address >> 8;
+        const A1 = (address & 0xF0) >> 4;
+        const A0 = address & 0xF;
+        try self.buffer.write_nibble(@intCast(u8, A2));
+        try self.buffer.write_nibble(@intCast(u8, A1));
+        try self.buffer.write_nibble(@intCast(u8, A0));
+    }
+
+    pub fn emit_label(self: *Assemble, label: LabelDecl) !void {
+        _ = try self.label_to_fill.put(self.buffer.location, label);
+        try self.buffer.write_nibble(0);
+        try self.buffer.write_nibble(0);
+        try self.buffer.write_nibble(0);
+    }
+
+    pub fn emit_address(self: *Assemble, address: Address) !void {
+        switch (address) {
+            .Value => |value| try self.emit_literal_address(value),
+            .Label => |label_decl| try self.emit_label(label_decl),
+        }
+    }
+
+    pub fn emit_register_pair(self: *Assemble, reg_pair: RegisterPair) !void {
+        const AA: u8 = @enumToInt(reg_pair.a);
+        const BB: u8 = @enumToInt(reg_pair.b);
+        const value = AA << 2 | BB;
+        try self.buffer.write_nibble(value);
+    }
+
+    pub fn emit_instruction(self: *Assemble, instr_stmt: InstrStmt) !void {
+        const instruction = instr_stmt.instruction;
+        try self.buffer.write_nibble(get_opcode(instruction));
+        switch (instruction) {
+            .LDI => |value| {
+                if (value >= (1 << 4)) {
+                    warn(
+                        instr_stmt.loc,
+                        "value is bigger than 15, it will be truncated\n",
+                    );
+                }
+                try self.emit_immediate(value);
+            },
+            .MOV, .ADD, .NAND => |reg_pair| try self.emit_register_pair(reg_pair),
+            .JMP, .JZ, .JC => |address| try self.emit_address(address),
+            else => {},
+        }
+    }
+};
+
 pub fn assemble(
     allocator: *Allocator,
     filename: []const u8,
@@ -128,72 +219,17 @@ pub fn assemble(
 ) ![]u8 {
     const statements = try parse(allocator, filename, source);
     defer allocator.free(statements);
-    var buffer = AsmBuffer.init(allocator);
-    var label_locations = AutoHashMap([]const u8, usize).init(allocator);
-    var label_to_fill = AutoHashMap(usize, LabelDecl).init(allocator);
-    defer {
-        label_to_fill.deinit();
-        label_locations.deinit();
-    }
+    var a = Assemble.init(allocator);
 
     for (statements) |statement| {
         if (statement.label) |label_decl| {
-            _ = try label_locations.put(label_decl.label, buffer.location);
+            try a.mark_label(label_decl.label);
         }
         if (statement.instruction) |instr_stmt| {
-            const instruction = instr_stmt.instruction;
-            try buffer.write_nibble(get_opcode(instruction));
-            switch (instruction) {
-                .LDI => |value| {
-                    if (value >= (1 << 4)) {
-                        warn(
-                            instr_stmt.loc,
-                            "value is bigger than 15, it will be truncated\n",
-                        );
-                    }
-                    try buffer.write_nibble(@intCast(u8, value & 0xF));
-                },
-                .MOV, .ADD, .NAND => |reg_pair| {
-                    const AA: u8 = @enumToInt(reg_pair.a);
-                    const BB: u8 = @enumToInt(reg_pair.b);
-                    const value = AA << 2 | BB;
-                    try buffer.write_nibble(value);
-                },
-                .JMP, .JZ, .JC => |address| {
-                    switch (address) {
-                        .Value => |value| {
-                            const A2 = value >> 8;
-                            const A1 = (value & 0xF0) >> 4;
-                            const A0 = value & 0xF;
-                            try buffer.write_nibble(@intCast(u8, A2));
-                            try buffer.write_nibble(@intCast(u8, A1));
-                            try buffer.write_nibble(@intCast(u8, A0));
-                        },
-                        .Label => |label_decl| {
-                            _ = try label_to_fill.put(
-                                buffer.location,
-                                label_decl,
-                            );
-                            try buffer.write_nibble(0);
-                            try buffer.write_nibble(0);
-                            try buffer.write_nibble(0);
-                        },
-                    }
-                },
-                else => {},
-            }
+            try a.emit_instruction(instr_stmt);
         }
     }
 
-    var fill_iterator = label_to_fill.iterator();
-    while (fill_iterator.next()) |entry| {
-        const fill_loc = entry.key;
-        const label_decl = entry.value;
-        const loc_entry = label_locations.get(label_decl.label) orelse {
-            fail(label_decl.loc, "undeclared label \"{}\"\n", label_decl.label);
-        };
-        buffer.write_address(loc_entry.value, fill_loc);
-    }
-
-    return buffer.data.toOwnedSlice();
+    a.fill_labels();
+    return a.return_assembly();
 }
