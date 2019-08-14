@@ -203,6 +203,7 @@ pub fn tokenize(
                         t.state = .HexNumber;
                     },
                     else => {
+                        t.number_value = 0;
                         t.revert_char();
                         t.end_token();
                         t.state = .Start;
