@@ -145,7 +145,8 @@ const Assemble = struct {
                 if (value >= (1 << 4)) {
                     warn(
                         instr_stmt.loc,
-                        "value is bigger than 15, it will be truncated\n",
+                        "value ({}) is bigger than 15, it will be truncated\n",
+                        value,
                     );
                 }
                 try self.emit_immediate(value);

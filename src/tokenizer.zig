@@ -195,9 +195,11 @@ pub fn tokenize(
                         t.number_value = c - '0';
                     },
                     'b' => {
+                        t.number_value = 0;
                         t.state = .BinNumber;
                     },
                     'x' => {
+                        t.number_value = 0;
                         t.state = .HexNumber;
                     },
                     else => {
