@@ -222,11 +222,9 @@ pub fn assemble(
     var a = Assemble.init(allocator);
 
     for (statements) |statement| {
-        if (statement.label) |label_decl| {
-            try a.mark_label(label_decl.label);
-        }
-        if (statement.instruction) |instr_stmt| {
-            try a.emit_instruction(instr_stmt);
+        switch (statement) {
+            .Label => |label_decl| try a.mark_label(label_decl.label),
+            .Instruction => |instr_stmt| try a.emit_instruction(instr_stmt),
         }
     }
 

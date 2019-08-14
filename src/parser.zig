@@ -32,9 +32,14 @@ pub const InstrStmt = struct {
     instruction: Instruction,
 };
 
-pub const Statement = struct {
+const ParsedLine = struct {
     label: ?LabelDecl,
     instruction: ?InstrStmt,
+};
+
+pub const Statement = union(enum) {
+    Label: LabelDecl,
+    Instruction: InstrStmt,
 };
 
 const ParseContext = struct {
@@ -207,7 +212,7 @@ const ParseContext = struct {
         return InstrStmt{ .loc = symbol.loc, .instruction = instr };
     }
 
-    fn parse_statement(self: *ParseContext) ?Statement {
+    fn parse_line(self: *ParseContext) ?ParsedLine {
         if (!self.has_tokens())
             return null;
 
@@ -215,23 +220,26 @@ const ParseContext = struct {
             _ = self.expect_token(.Newline);
         }
 
-        var statement = Statement{ .label = null, .instruction = null };
-        statement.label = self.parse_label_decl();
-        statement.instruction = self.parse_instruction();
+        var line = ParsedLine{ .label = null, .instruction = null };
+        line.label = self.parse_label_decl();
+        line.instruction = self.parse_instruction();
 
         _ = self.eat_token_if(.Comment);
         _ = self.expect_token(.Newline);
 
-        return statement;
+        return line;
     }
 
     pub fn parse(self: *ParseContext, allocator: *Allocator) ![]Statement {
         var statements = ArrayList(Statement).init(allocator);
 
-        while (self.parse_statement()) |statement| {
-            if (statement.label == null and statement.instruction == null)
-                continue;
-            try statements.append(statement);
+        while (self.parse_line()) |line| {
+            if (line.label) |label| {
+                try statements.append(Statement{ .Label = label });
+            }
+            if (line.instruction) |instruction| {
+                try statements.append(Statement{ .Instruction = instruction });
+            }
         }
 
         return statements.toOwnedSlice();
