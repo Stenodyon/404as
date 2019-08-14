@@ -168,11 +168,11 @@ pub fn tokenize(
                         t.state = .Comment;
                     },
                     ':' => {
-                        try t.begin_token(.Comma);
+                        try t.begin_token(.Colon);
                         t.end_token();
                     },
                     ',' => {
-                        try t.begin_token(.Colon);
+                        try t.begin_token(.Comma);
                         t.end_token();
                     },
                     else => {

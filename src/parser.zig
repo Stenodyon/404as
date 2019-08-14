@@ -121,7 +121,7 @@ const ParseContext = struct {
 
     fn parse_register_pair(self: *ParseContext) RegisterPair {
         const reg_a = self.parse_register();
-        _ = self.expect_token(.Colon);
+        _ = self.expect_token(.Comma);
         const reg_b = self.parse_register();
         return RegisterPair{ .a = reg_a, .b = reg_b };
     }
@@ -151,7 +151,7 @@ const ParseContext = struct {
     fn parse_label_decl(self: *ParseContext) ?LabelDecl {
         const initial_loc = self.current_token;
         const symbol = self.eat_token_if(.Symbol) orelse return null;
-        _ = self.eat_token_if(.Comma) orelse {
+        _ = self.eat_token_if(.Colon) orelse {
             self.current_token = initial_loc;
             return null;
         };
