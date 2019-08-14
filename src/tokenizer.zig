@@ -243,11 +243,11 @@ pub fn tokenize(
                     },
                     'a'...'f' => {
                         t.number_value *= 16;
-                        t.number_value += c - 'a';
+                        t.number_value += 10 + c - 'a';
                     },
                     'A'...'F' => {
                         t.number_value *= 16;
-                        t.number_value += c - 'A';
+                        t.number_value += 10 + c - 'A';
                     },
                     '_' => {},
                     else => {

@@ -154,7 +154,7 @@ const ParseContext = struct {
                 break :blk Instruction{ .NOP = {} };
             } else if (streqi("LDI", symbol.contents)) {
                 const value = self.expect_token(.Number);
-                break :blk Instruction{ .LDI = symbol.number_value };
+                break :blk Instruction{ .LDI = value.number_value };
             } else if (streqi("LOD", symbol.contents)) {
                 break :blk Instruction{ .LOD = {} };
             } else if (streqi("STR", symbol.contents)) {
