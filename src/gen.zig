@@ -175,5 +175,9 @@ pub fn assemble(
     }
 
     a.fill_labels();
-    return a.return_assembly();
+    const assembly = a.return_assembly();
+    if (assembly.len > 256) {
+        std.debug.warn("warning: output assembly is over 256B\n");
+    }
+    return assembly;
 }
