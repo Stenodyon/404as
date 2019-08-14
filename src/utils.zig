@@ -35,3 +35,7 @@ pub fn fail(loc: SourceLoc, comptime fmt: []const u8, args: ...) noreturn {
     std.debug.warn(fmt, args);
     std.process.exit(1);
 }
+
+pub fn assert(ok: bool) void {
+    if (!ok) std.debug.panic("assertion failed\n");
+}

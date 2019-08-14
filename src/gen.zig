@@ -202,6 +202,64 @@ const Assemble = struct {
     }
 };
 
+test "Assemble.emit_literal" {
+    var a = Assemble.init(std.debug.global_allocator);
+    try a.emit_immediate(0x1);
+    try a.emit_immediate(0xF);
+    try a.emit_immediate(0xF);
+    try a.emit_immediate(0xA);
+
+    const assembly = a.return_assembly();
+
+    assert(assembly.len == 2);
+    assert(assembly[0] == 0x1F);
+    assert(assembly[1] == 0xFA);
+}
+
+test "Assemble.emit_literal_address" {
+    var a = Assemble.init(std.debug.global_allocator);
+    try a.emit_literal_address(0x123);
+    try a.emit_literal_address(0x456);
+
+    const assembly = a.return_assembly();
+
+    assert(assembly.len == 3);
+    assert(assembly[0] == 0x12);
+    assert(assembly[1] == 0x34);
+    assert(assembly[2] == 0x56);
+}
+
+test "Assemble.emit_label" {
+    var a = Assemble.init(std.debug.global_allocator);
+    _ = try a.label_locations.put("test_label", 0x123);
+
+    const decl = LabelDecl{
+        .loc = SourceLoc.init("test"),
+        .label = "test_label",
+    };
+    try a.emit_label(decl);
+    try a.emit_label(decl);
+    a.fill_labels();
+
+    const assembly = a.return_assembly();
+    assert(assembly.len == 3);
+    assert(assembly[0] == 0x12);
+    assert(assembly[1] == 0x31);
+    assert(assembly[2] == 0x23);
+}
+
+test "Assemble.emit_register_pair" {
+    var a = Assemble.init(std.debug.global_allocator);
+    const pair1 = RegisterPair{ .a = .A, .b = .B };
+    const pair2 = RegisterPair{ .a = .C, .b = .D };
+    try a.emit_register_pair(pair1);
+    try a.emit_register_pair(pair2);
+
+    const assembly = a.return_assembly();
+    assert(assembly.len == 1);
+    assert(assembly[0] == 0x1B);
+}
+
 pub fn assemble(
     allocator: *Allocator,
     filename: []const u8,
