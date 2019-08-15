@@ -5,6 +5,7 @@ const AutoHashMap = std.AutoHashMap;
 
 usingnamespace @import("architecture.zig");
 usingnamespace @import("parser.zig");
+usingnamespace @import("expressions.zig");
 usingnamespace @import("utils.zig");
 
 const AsmBuffer = struct {
@@ -90,7 +91,7 @@ test "AsmBuffer.write_address lower" {
     }
 }
 
-fn get_opcode(instruction: Instruction) u8 {
+fn get_opcode(instruction: @TagType(Instruction)) u8 {
     switch (instruction) {
         .NOP => return 0b0000,
         .LDI => return 0b0001,
@@ -111,27 +112,45 @@ fn get_opcode(instruction: Instruction) u8 {
 
 const Assemble = struct {
     const LabelLocMap = AutoHashMap([]const u8, usize);
+    const ExprEvalContext = struct {
+        expr: *Expression,
+        size: usize, // in nibbles
+    };
 
     buffer: AsmBuffer,
     label_locations: LabelLocMap,
     label_to_fill: AutoHashMap(usize, LabelDecl),
+    expr_to_eval: AutoHashMap(usize, ExprEvalContext),
 
     pub fn init(allocator: *Allocator) Assemble {
         return Assemble{
             .buffer = AsmBuffer.init(allocator),
             .label_locations = LabelLocMap.init(allocator),
             .label_to_fill = AutoHashMap(usize, LabelDecl).init(allocator),
+            .expr_to_eval = AutoHashMap(usize, ExprEvalContext).init(allocator),
         };
     }
 
     pub fn return_assembly(self: *Assemble) []u8 {
         self.label_locations.deinit();
         self.label_to_fill.deinit();
+        self.expr_to_eval.deinit();
         return self.buffer.data.toOwnedSlice();
     }
 
     pub fn mark_label(self: *Assemble, name: []const u8) !void {
         _ = try self.label_locations.put(name, self.buffer.location);
+    }
+
+    pub fn defer_expr_eval(
+        self: *Assemble,
+        expr: *Expression,
+        size: usize,
+    ) !void {
+        _ = try self.expr_to_eval.put(self.buffer.location, ExprEvalContext{
+            .expr = expr,
+            .size = size,
+        });
     }
 
     pub fn fill_labels(self: *Assemble) void {
@@ -140,37 +159,26 @@ const Assemble = struct {
             const fill_loc = entry.key;
             const label_decl = entry.value;
             const loc_entry = self.label_locations.get(label_decl.label) orelse {
-                fail(label_decl.loc, "undeclared label \"{}\"\n", label_decl.label);
+                fail(
+                    label_decl.loc,
+                    "undeclared label \"{}\"\n",
+                    label_decl.label,
+                );
             };
             self.buffer.write_address(loc_entry.value, fill_loc);
         }
     }
 
-    pub fn emit_immediate(self: *Assemble, value: usize) !void {
-        try self.buffer.write_nibble(@intCast(u8, value & 0xF));
-    }
-
-    pub fn emit_literal_address(self: *Assemble, address: usize) !void {
-        const A2 = address >> 8;
-        const A1 = (address & 0xF0) >> 4;
-        const A0 = address & 0xF;
-        try self.buffer.write_nibble(@intCast(u8, A2));
-        try self.buffer.write_nibble(@intCast(u8, A1));
-        try self.buffer.write_nibble(@intCast(u8, A0));
-    }
-
-    pub fn emit_label(self: *Assemble, label: LabelDecl) !void {
-        _ = try self.label_to_fill.put(self.buffer.location, label);
-        try self.buffer.write_nibble(0);
-        try self.buffer.write_nibble(0);
+    pub fn emit_immediate(self: *Assemble, expr: *Expression) !void {
+        try self.defer_expr_eval(expr, 1);
         try self.buffer.write_nibble(0);
     }
 
-    pub fn emit_address(self: *Assemble, address: Address) !void {
-        switch (address) {
-            .Value => |value| try self.emit_literal_address(value),
-            .Label => |label_decl| try self.emit_label(label_decl),
-        }
+    pub fn emit_address(self: *Assemble, expr: *Expression) !void {
+        try self.defer_expr_eval(expr, 3);
+        try self.buffer.write_nibble(0);
+        try self.buffer.write_nibble(0);
+        try self.buffer.write_nibble(0);
     }
 
     pub fn emit_register_pair(self: *Assemble, reg_pair: RegisterPair) !void {
@@ -182,20 +190,29 @@ const Assemble = struct {
 
     pub fn emit_instruction(self: *Assemble, instr_stmt: InstrStmt) !void {
         const instruction = instr_stmt.instruction;
-        try self.buffer.write_nibble(get_opcode(instruction));
-        switch (instruction) {
-            .LDI => |value| {
-                if (value >= (1 << 4)) {
-                    warn(
-                        instr_stmt.loc,
-                        "value ({}) is bigger than 15, it will be truncated\n",
-                        value,
-                    );
-                }
-                try self.emit_immediate(value);
+        try self.buffer.write_nibble(get_opcode(instruction.id));
+        switch (instruction.id) {
+            .LDI => {
+                const expr = switch (instruction.operands orelse unreachable) {
+                    .Expression => |e| e,
+                    else => unreachable,
+                };
+                try self.emit_immediate(expr);
             },
-            .MOV, .ADD, .NAND => |reg_pair| try self.emit_register_pair(reg_pair),
-            .JMP, .JZ, .JC => |address| try self.emit_address(address),
+            .MOV, .ADD, .NAND => {
+                const reg_pair = switch (instruction.operands orelse unreachable) {
+                    .RegisterPair => |register_pair| register_pair,
+                    else => unreachable,
+                };
+                try self.emit_register_pair(reg_pair);
+            },
+            .JMP, .JZ, .JC => {
+                const expr = switch (instruction.operands orelse unreachable) {
+                    .Expression => |e| e,
+                    else => unreachable,
+                };
+                try self.emit_address(expr);
+            },
             else => {},
         }
     }
@@ -264,11 +281,11 @@ pub fn assemble(
     filename: []const u8,
     source: []const u8,
 ) ![]u8 {
-    const statements = try parse(allocator, filename, source);
-    defer allocator.free(statements);
+    var parse_result = try parse(allocator, filename, source);
+    defer parse_result.deinit();
     var a = Assemble.init(allocator);
 
-    for (statements) |statement| {
+    for (parse_result.statements) |statement| {
         switch (statement) {
             .Label => |label_decl| try a.mark_label(label_decl.label),
             .Instruction => |instr_stmt| try a.emit_instruction(instr_stmt),

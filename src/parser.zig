@@ -1,9 +1,11 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 const ArrayList = std.ArrayList;
+const SegmentedList = std.SegmentedList;
 
 usingnamespace @import("tokenizer.zig");
 usingnamespace @import("architecture.zig");
+usingnamespace @import("expressions.zig");
 usingnamespace @import("utils.zig");
 
 pub const LabelDecl = struct {
@@ -11,9 +13,19 @@ pub const LabelDecl = struct {
     label: []const u8,
 };
 
+pub const ParsedInstruction = struct {
+    const Operands = union(enum) {
+        Expression: *Expression,
+        RegisterPair: RegisterPair,
+    };
+
+    id: @TagType(Instruction),
+    operands: ?Operands,
+};
+
 pub const InstrStmt = struct {
     loc: SourceLoc,
-    instruction: Instruction,
+    instruction: ParsedInstruction,
 };
 
 const ParsedLine = struct {
@@ -26,14 +38,26 @@ pub const Statement = union(enum) {
     Instruction: InstrStmt,
 };
 
+pub const ParseResult = struct {
+    statements: []Statement,
+    expressions: SegmentedList(Expression, 0),
+
+    pub fn deinit(self: *ParseResult) void {
+        self.expressions.allocator.free(self.statements);
+        self.expressions.deinit();
+    }
+};
+
 const ParseContext = struct {
     tokens: []const Token,
     current_token: usize,
+    expressions: SegmentedList(Expression, 0),
 
     fn init(allocator: *Allocator, tokens: []const Token) ParseContext {
         return ParseContext{
             .tokens = tokens,
             .current_token = 0,
+            .expressions = SegmentedList(Expression, 0).init(allocator),
         };
     }
 
@@ -115,20 +139,29 @@ const ParseContext = struct {
         return RegisterPair{ .a = reg_a, .b = reg_b };
     }
 
-    fn parse_address(self: *ParseContext) Address {
+    fn parse_address(self: *ParseContext) !*Expression {
         const token = self.eat_token() orelse {
             std.debug.warn("Unexpected end of file\n");
             std.process.exit(1);
         };
         if (token.id == .Number) {
-            return Address{ .Value = token.number_value };
-        } else if (token.id == .Symbol) {
-            return Address{
-                .Label = LabelDecl{
+            const expr = Expression{
+                .Literal = ExprLiteral{
                     .loc = token.loc,
-                    .label = token.contents,
+                    .value = token.number_value,
                 },
             };
+            try self.expressions.push(expr);
+            return self.expressions.at(self.expressions.count() - 1);
+        } else if (token.id == .Symbol) {
+            const expr = Expression{
+                .Label = ExprLabel{
+                    .loc = token.loc,
+                    .name = token.contents,
+                },
+            };
+            try self.expressions.push(expr);
+            return self.expressions.at(self.expressions.count() - 1);
         }
         fail(
             token.loc,
@@ -147,44 +180,94 @@ const ParseContext = struct {
         return LabelDecl{ .loc = symbol.loc, .label = symbol.contents };
     }
 
-    fn parse_instruction(self: *ParseContext) ?InstrStmt {
+    fn parse_instruction(self: *ParseContext) !?InstrStmt {
         const symbol = self.eat_token_if(.Symbol) orelse return null;
-        const instr = blk: {
+        const instr: ParsedInstruction = blk: {
             if (streqi("NOP", symbol.contents)) {
-                break :blk Instruction{ .NOP = {} };
+                break :blk ParsedInstruction{
+                    .id = .NOP,
+                    .operands = null,
+                };
             } else if (streqi("LDI", symbol.contents)) {
                 const value = self.expect_token(.Number);
-                break :blk Instruction{ .LDI = value.number_value };
+                const lit = Expression{
+                    .Literal = ExprLiteral{
+                        .loc = symbol.loc,
+                        .value = value.number_value,
+                    },
+                };
+                try self.expressions.push(lit);
+                const expr = self.expressions.at(self.expressions.count() - 1);
+                break :blk ParsedInstruction{
+                    .id = .LDI,
+                    .operands = ParsedInstruction.Operands{ .Expression = expr },
+                };
             } else if (streqi("LOD", symbol.contents)) {
-                break :blk Instruction{ .LOD = {} };
+                break :blk ParsedInstruction{
+                    .id = .LOD,
+                    .operands = null,
+                };
             } else if (streqi("STR", symbol.contents)) {
-                break :blk Instruction{ .STR = {} };
+                break :blk ParsedInstruction{
+                    .id = .STR,
+                    .operands = null,
+                };
             } else if (streqi("SAR", symbol.contents)) {
-                break :blk Instruction{ .SAR = {} };
+                break :blk ParsedInstruction{
+                    .id = .SAR,
+                    .operands = null,
+                };
             } else if (streqi("SAP", symbol.contents)) {
-                break :blk Instruction{ .SAP = {} };
+                break :blk ParsedInstruction{
+                    .id = .SAP,
+                    .operands = null,
+                };
             } else if (streqi("MOV", symbol.contents)) {
                 const reg_pair = self.parse_register_pair();
-                break :blk Instruction{ .MOV = reg_pair };
+                break :blk ParsedInstruction{
+                    .id = .MOV,
+                    .operands = ParsedInstruction.Operands{ .RegisterPair = reg_pair },
+                };
             } else if (streqi("CLC", symbol.contents)) {
-                break :blk Instruction{ .CLC = {} };
+                break :blk ParsedInstruction{
+                    .id = .CLC,
+                    .operands = null,
+                };
             } else if (streqi("JMP", symbol.contents)) {
-                const address = self.parse_address();
-                break :blk Instruction{ .JMP = address };
+                const address_expr = try self.parse_address();
+                break :blk ParsedInstruction{
+                    .id = .JMP,
+                    .operands = ParsedInstruction.Operands{ .Expression = address_expr },
+                };
             } else if (streqi("RJP", symbol.contents)) {
-                break :blk Instruction{ .RJP = {} };
+                break :blk ParsedInstruction{
+                    .id = .RJP,
+                    .operands = null,
+                };
             } else if (streqi("JZ", symbol.contents)) {
-                const address = self.parse_address();
-                break :blk Instruction{ .JZ = address };
+                const address_expr = try self.parse_address();
+                break :blk ParsedInstruction{
+                    .id = .JZ,
+                    .operands = ParsedInstruction.Operands{ .Expression = address_expr },
+                };
             } else if (streqi("JC", symbol.contents)) {
-                const address = self.parse_address();
-                break :blk Instruction{ .JC = address };
+                const address_expr = try self.parse_address();
+                break :blk ParsedInstruction{
+                    .id = .JC,
+                    .operands = ParsedInstruction.Operands{ .Expression = address_expr },
+                };
             } else if (streqi("ADD", symbol.contents)) {
                 const reg_pair = self.parse_register_pair();
-                break :blk Instruction{ .ADD = reg_pair };
+                break :blk ParsedInstruction{
+                    .id = .ADD,
+                    .operands = ParsedInstruction.Operands{ .RegisterPair = reg_pair },
+                };
             } else if (streqi("NAND", symbol.contents)) {
                 const reg_pair = self.parse_register_pair();
-                break :blk Instruction{ .NAND = reg_pair };
+                break :blk ParsedInstruction{
+                    .id = .NAND,
+                    .operands = ParsedInstruction.Operands{ .RegisterPair = reg_pair },
+                };
             } else {
                 fail(
                     symbol.loc,
@@ -196,7 +279,7 @@ const ParseContext = struct {
         return InstrStmt{ .loc = symbol.loc, .instruction = instr };
     }
 
-    fn parse_line(self: *ParseContext) ?ParsedLine {
+    fn parse_line(self: *ParseContext) !?ParsedLine {
         if (!self.has_tokens())
             return null;
 
@@ -206,7 +289,7 @@ const ParseContext = struct {
 
         var line = ParsedLine{ .label = null, .instruction = null };
         line.label = self.parse_label_decl();
-        line.instruction = self.parse_instruction();
+        line.instruction = try self.parse_instruction();
 
         _ = self.eat_token_if(.Comment);
         _ = self.expect_token(.Newline);
@@ -214,10 +297,10 @@ const ParseContext = struct {
         return line;
     }
 
-    pub fn parse(self: *ParseContext, allocator: *Allocator) ![]Statement {
+    pub fn parse(self: *ParseContext, allocator: *Allocator) !ParseResult {
         var statements = ArrayList(Statement).init(allocator);
 
-        while (self.parse_line()) |line| {
+        while (try self.parse_line()) |line| {
             if (line.label) |label| {
                 try statements.append(Statement{ .Label = label });
             }
@@ -226,7 +309,10 @@ const ParseContext = struct {
             }
         }
 
-        return statements.toOwnedSlice();
+        return ParseResult{
+            .statements = statements.toOwnedSlice(),
+            .expressions = self.expressions,
+        };
     }
 };
 
@@ -234,12 +320,12 @@ pub fn parse(
     allocator: *Allocator,
     filename: []const u8,
     source: []const u8,
-) ![]Statement {
+) !ParseResult {
     const tokens = try tokenize(allocator, filename, source);
     defer allocator.free(tokens);
 
     var pc = ParseContext.init(allocator, tokens);
-    const statements = pc.parse(allocator);
+    const result = try pc.parse(allocator);
 
-    return statements;
+    return result;
 }

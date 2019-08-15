@@ -45,11 +45,6 @@ pub const ExprBinop = struct {
     op: Binop,
 };
 
-pub const ExprEvalContext = struct {
-    current_location: usize,
-    root: *Expression,
-};
-
 const LabelMap = AutoHashMap([]const u8, usize);
 
 pub const Expression = union(enum) {
