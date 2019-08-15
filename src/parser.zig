@@ -53,6 +53,8 @@ const ParseContext = struct {
     current_token: usize,
     expressions: SegmentedList(Expression, 0),
 
+    const ExprError = @typeOf(SegmentedList(Expression, 0).push).ReturnType.ErrorSet;
+
     fn init(allocator: *Allocator, tokens: []const Token) ParseContext {
         return ParseContext{
             .tokens = tokens,
@@ -236,10 +238,21 @@ const ParseContext = struct {
     fn parse_term(self: *ParseContext) !?*Expression {
         if (try self.parse_number()) |number| return number;
         if (try self.parse_label()) |label| return label;
+        if (self.eat_token_if(.ParenOpen)) |paren| {
+            const expr = (try self.parse_expression()) orelse {
+                fail(
+                    paren.loc,
+                    "expected expression after '{}'\n",
+                    paren.contents,
+                );
+            };
+            _ = self.expect_token(.ParenClose);
+            return expr;
+        }
         return null;
     }
 
-    fn parse_expression(self: *ParseContext) !?*Expression {
+    fn parse_expression(self: *ParseContext) ExprError!?*Expression {
         return try self.parse_addsub_expr();
     }
 
