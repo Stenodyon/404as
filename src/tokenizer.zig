@@ -15,6 +15,7 @@ pub const TokenId = enum {
     Ampersand,
     Pipe,
     Caret,
+    Tilda,
     ParenOpen,
     ParenClose,
     SquareBracketOpen,
@@ -187,6 +188,10 @@ pub fn tokenize(
                     },
                     '^' => {
                         try t.begin_token(.Caret);
+                        t.end_token();
+                    },
+                    '~' => {
+                        try t.begin_token(.Tilda);
                         t.end_token();
                     },
                     '(' => {

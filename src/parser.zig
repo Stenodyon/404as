@@ -208,7 +208,7 @@ const ParseContext = struct {
 
     fn parse_muldiv_expr(self: *ParseContext) !?*Expression {
         const initial_loc = self.current_token;
-        const lhs = (try self.parse_term()) orelse return null;
+        const lhs = (try self.parse_neg_expr()) orelse return null;
         const operator_token = blk: {
             if (self.eat_token_if(.Asterisk)) |token| break :blk token;
             if (self.eat_token_if(.Slash)) |token| break :blk token;
@@ -219,7 +219,7 @@ const ParseContext = struct {
             .Slash => Binop.Div,
             else => unreachable,
         };
-        const rhs = (try self.parse_term()) orelse {
+        const rhs = (try self.parse_neg_expr()) orelse {
             fail(
                 operator_token.loc,
                 "expected expression after '{}'\n",
@@ -230,6 +230,32 @@ const ParseContext = struct {
             .Binop = ExprBinop{
                 .lhs = lhs,
                 .rhs = rhs,
+                .op = operator,
+            },
+        });
+    }
+
+    fn parse_neg_expr(self: *ParseContext) !?*Expression {
+        const operator_token = blk: {
+            if (self.eat_token_if(.Minus)) |token| break :blk token;
+            if (self.eat_token_if(.Tilda)) |token| break :blk token;
+            return try self.parse_term();
+        };
+        const operator = switch (operator_token.id) {
+            .Minus => Unop.Neg,
+            .Tilda => Unop.NOT,
+            else => unreachable,
+        };
+        const expr = (try self.parse_term()) orelse {
+            fail(
+                operator_token.loc,
+                "expected expression after '{}'\n",
+                operator_token.contents,
+            );
+        };
+        return try self.push_expression(Expression{
+            .Unop = ExprUnop{
+                .expr = expr,
                 .op = operator,
             },
         });

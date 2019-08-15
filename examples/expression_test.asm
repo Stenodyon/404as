@@ -1,4 +1,4 @@
 reset:
     JMP start
 start:
-    JMP (start + 3) * 4
+    JMP (start + -3) * 4
