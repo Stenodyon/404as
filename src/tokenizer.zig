@@ -8,6 +8,17 @@ usingnamespace @import("utils.zig");
 pub const TokenId = enum {
     Comma,
     Colon,
+    Plus,
+    Minus,
+    Slash,
+    Asterisk,
+    Ampersand,
+    Pipe,
+    Caret,
+    ParenOpen,
+    ParenClose,
+    SquareBracketOpen,
+    SquareBracketClose,
     Symbol,
     Number,
     Comment,
@@ -148,6 +159,50 @@ pub fn tokenize(
                     },
                     ',' => {
                         try t.begin_token(.Comma);
+                        t.end_token();
+                    },
+                    '+' => {
+                        try t.begin_token(.Plus);
+                        t.end_token();
+                    },
+                    '-' => {
+                        try t.begin_token(.Minus);
+                        t.end_token();
+                    },
+                    '/' => {
+                        try t.begin_token(.Slash);
+                        t.end_token();
+                    },
+                    '*' => {
+                        try t.begin_token(.Asterisk);
+                        t.end_token();
+                    },
+                    '&' => {
+                        try t.begin_token(.Ampersand);
+                        t.end_token();
+                    },
+                    '|' => {
+                        try t.begin_token(.Pipe);
+                        t.end_token();
+                    },
+                    '^' => {
+                        try t.begin_token(.Caret);
+                        t.end_token();
+                    },
+                    '(' => {
+                        try t.begin_token(.ParenOpen);
+                        t.end_token();
+                    },
+                    ')' => {
+                        try t.begin_token(.ParenClose);
+                        t.end_token();
+                    },
+                    '[' => {
+                        try t.begin_token(.SquareBracketOpen);
+                        t.end_token();
+                    },
+                    ']' => {
+                        try t.begin_token(.SquareBracketClose);
                         t.end_token();
                     },
                     else => {

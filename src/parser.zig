@@ -88,6 +88,13 @@ const ParseContext = struct {
         return null;
     }
 
+    fn peek_token_if(self: *ParseContext, id: TokenId) ?*const Token {
+        const token = self.peek_token() orelse return null;
+        if (token.id == id)
+            return token;
+        return null;
+    }
+
     fn eat_token(self: *ParseContext) ?*const Token {
         if (self.current_token < self.tokens.len) {
             const token = &self.tokens[self.current_token];
@@ -139,6 +146,36 @@ const ParseContext = struct {
         return RegisterPair{ .a = reg_a, .b = reg_b };
     }
 
+    fn parse_number(self: *ParseContext) !?*Expression {
+        const token = self.eat_token_if(.Number) orelse return null;
+        const expr = Expression{
+            .Literal = ExprLiteral{
+                .loc = token.loc,
+                .value = token.number_value,
+            },
+        };
+        try self.expressions.push(expr);
+        return self.expressions.at(self.expressions.count() - 1);
+    }
+
+    fn parse_label(self: *ParseContext) !?*Expression {
+        const token = self.eat_token_if(.Symbol) orelse return null;
+        const expr = Expression{
+            .Label = ExprLabel{
+                .loc = token.loc,
+                .name = token.contents,
+            },
+        };
+        try self.expressions.push(expr);
+        return self.expressions.at(self.expressions.count() - 1);
+    }
+
+    fn parse_expression(self: *ParseContext) !?*Expression {
+        if (try self.parse_number()) |number| return number;
+        if (try self.parse_label()) |label| return label;
+        return null;
+    }
+
     fn parse_address(self: *ParseContext) !*Expression {
         const token = self.eat_token() orelse {
             std.debug.warn("Unexpected end of file\n");
@@ -180,102 +217,64 @@ const ParseContext = struct {
         return LabelDecl{ .loc = symbol.loc, .label = symbol.contents };
     }
 
-    fn parse_instruction(self: *ParseContext) !?InstrStmt {
+    fn parse_mnemonic(self: *ParseContext) ?@TagType(Instruction) {
         const symbol = self.eat_token_if(.Symbol) orelse return null;
-        const instr: ParsedInstruction = blk: {
-            if (streqi("NOP", symbol.contents)) {
-                break :blk ParsedInstruction{
-                    .id = .NOP,
-                    .operands = null,
-                };
-            } else if (streqi("LDI", symbol.contents)) {
-                const value = self.expect_token(.Number);
-                const lit = Expression{
-                    .Literal = ExprLiteral{
-                        .loc = symbol.loc,
-                        .value = value.number_value,
-                    },
-                };
-                try self.expressions.push(lit);
-                const expr = self.expressions.at(self.expressions.count() - 1);
-                break :blk ParsedInstruction{
-                    .id = .LDI,
-                    .operands = ParsedInstruction.Operands{ .Expression = expr },
-                };
-            } else if (streqi("LOD", symbol.contents)) {
-                break :blk ParsedInstruction{
-                    .id = .LOD,
-                    .operands = null,
-                };
-            } else if (streqi("STR", symbol.contents)) {
-                break :blk ParsedInstruction{
-                    .id = .STR,
-                    .operands = null,
-                };
-            } else if (streqi("SAR", symbol.contents)) {
-                break :blk ParsedInstruction{
-                    .id = .SAR,
-                    .operands = null,
-                };
-            } else if (streqi("SAP", symbol.contents)) {
-                break :blk ParsedInstruction{
-                    .id = .SAP,
-                    .operands = null,
-                };
-            } else if (streqi("MOV", symbol.contents)) {
-                const reg_pair = self.parse_register_pair();
-                break :blk ParsedInstruction{
-                    .id = .MOV,
-                    .operands = ParsedInstruction.Operands{ .RegisterPair = reg_pair },
-                };
-            } else if (streqi("CLC", symbol.contents)) {
-                break :blk ParsedInstruction{
-                    .id = .CLC,
-                    .operands = null,
-                };
-            } else if (streqi("JMP", symbol.contents)) {
-                const address_expr = try self.parse_address();
-                break :blk ParsedInstruction{
-                    .id = .JMP,
-                    .operands = ParsedInstruction.Operands{ .Expression = address_expr },
-                };
-            } else if (streqi("RJP", symbol.contents)) {
-                break :blk ParsedInstruction{
-                    .id = .RJP,
-                    .operands = null,
-                };
-            } else if (streqi("JZ", symbol.contents)) {
-                const address_expr = try self.parse_address();
-                break :blk ParsedInstruction{
-                    .id = .JZ,
-                    .operands = ParsedInstruction.Operands{ .Expression = address_expr },
-                };
-            } else if (streqi("JC", symbol.contents)) {
-                const address_expr = try self.parse_address();
-                break :blk ParsedInstruction{
-                    .id = .JC,
-                    .operands = ParsedInstruction.Operands{ .Expression = address_expr },
-                };
-            } else if (streqi("ADD", symbol.contents)) {
-                const reg_pair = self.parse_register_pair();
-                break :blk ParsedInstruction{
-                    .id = .ADD,
-                    .operands = ParsedInstruction.Operands{ .RegisterPair = reg_pair },
-                };
-            } else if (streqi("NAND", symbol.contents)) {
-                const reg_pair = self.parse_register_pair();
-                break :blk ParsedInstruction{
-                    .id = .NAND,
-                    .operands = ParsedInstruction.Operands{ .RegisterPair = reg_pair },
-                };
-            } else {
-                fail(
-                    symbol.loc,
-                    "unknown instruction \"{}\"\n",
-                    @tagName(symbol.id),
-                );
-            }
+        if (streqi("NOP", symbol.contents)) {
+            return @TagType(Instruction).NOP;
+        } else if (streqi("LDI", symbol.contents)) {
+            return @TagType(Instruction).LDI;
+        } else if (streqi("LOD", symbol.contents)) {
+            return @TagType(Instruction).LOD;
+        } else if (streqi("STR", symbol.contents)) {
+            return @TagType(Instruction).STR;
+        } else if (streqi("SAR", symbol.contents)) {
+            return @TagType(Instruction).SAR;
+        } else if (streqi("SAP", symbol.contents)) {
+            return @TagType(Instruction).SAP;
+        } else if (streqi("MOV", symbol.contents)) {
+            return @TagType(Instruction).MOV;
+        } else if (streqi("CLC", symbol.contents)) {
+            return @TagType(Instruction).CLC;
+        } else if (streqi("JMP", symbol.contents)) {
+            return @TagType(Instruction).JMP;
+        } else if (streqi("RJP", symbol.contents)) {
+            return @TagType(Instruction).RJP;
+        } else if (streqi("JZ", symbol.contents)) {
+            return @TagType(Instruction).JZ;
+        } else if (streqi("JC", symbol.contents)) {
+            return @TagType(Instruction).JC;
+        } else if (streqi("ADD", symbol.contents)) {
+            return @TagType(Instruction).ADD;
+        } else if (streqi("NAND", symbol.contents)) {
+            return @TagType(Instruction).NAND;
+        } else {
+            return null;
+        }
+    }
+
+    fn parse_instruction(self: *ParseContext) !?InstrStmt {
+        const symbol = self.peek_token_if(.Symbol) orelse return null;
+        const mnemonic = self.parse_mnemonic() orelse {
+            fail(
+                symbol.loc,
+                "unknown instruction \"{}\"\n",
+                @tagName(symbol.id),
+            );
         };
+        const operands: ?ParsedInstruction.Operands = switch (mnemonic) {
+            .LDI, .JMP, .JZ, .JC => blk: {
+                const expr = (try self.parse_expression()) orelse {
+                    fail(symbol.loc, "expected expression\n");
+                };
+                break :blk ParsedInstruction.Operands{ .Expression = expr };
+            },
+            .MOV, .ADD, .NAND => blk: {
+                const reg_pair = self.parse_register_pair();
+                break :blk ParsedInstruction.Operands{ .RegisterPair = reg_pair };
+            },
+            else => null,
+        };
+        const instr = ParsedInstruction{ .id = mnemonic, .operands = operands };
         return InstrStmt{ .loc = symbol.loc, .instruction = instr };
     }
 
