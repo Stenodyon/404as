@@ -54,7 +54,19 @@ pub const Expression = union(enum) {
     ArrayAccess: ExprArrayAccess,
     Unop: ExprUnop,
     Binop: ExprBinop,
-    CurrentLoc,
+    CurrentLoc: SourceLoc,
+
+    pub fn source_loc(self: *const Expression) SourceLoc {
+        switch (self.*) {
+            .Literal => |lit| return lit.loc,
+            .Label => |label| return label.loc,
+            .ArrayAccess => |aa| return aa.expr.source_loc(),
+            .Unop => |unop| return unop.expr.source_loc(),
+            .Binop => |binop| return binop.lhs.source_loc(),
+            .CurrentLoc => |loc| return loc,
+            else => unreachable,
+        }
+    }
 
     fn eval(
         self: *const Expression,
@@ -294,7 +306,9 @@ test "Expression.evaluate Binop.XOR" {
 
 test "Expression.evaluate CurrentLoc" {
     const labels = LabelMap.init(std.debug.global_allocator);
-    const currentloc = Expression{ .CurrentLoc = {} };
+    const currentloc = Expression{
+        .CurrentLoc = SourceLoc.init("test"),
+    };
 
     var result = currentloc.evaluate(&labels, 0);
     std.debug.warn("{} == {} ", result, usize(0));
