@@ -176,37 +176,6 @@ const ParseContext = struct {
         return null;
     }
 
-    fn parse_address(self: *ParseContext) !*Expression {
-        const token = self.eat_token() orelse {
-            std.debug.warn("Unexpected end of file\n");
-            std.process.exit(1);
-        };
-        if (token.id == .Number) {
-            const expr = Expression{
-                .Literal = ExprLiteral{
-                    .loc = token.loc,
-                    .value = token.number_value,
-                },
-            };
-            try self.expressions.push(expr);
-            return self.expressions.at(self.expressions.count() - 1);
-        } else if (token.id == .Symbol) {
-            const expr = Expression{
-                .Label = ExprLabel{
-                    .loc = token.loc,
-                    .name = token.contents,
-                },
-            };
-            try self.expressions.push(expr);
-            return self.expressions.at(self.expressions.count() - 1);
-        }
-        fail(
-            token.loc,
-            "expected NUMBER or LABEL, found {}\n",
-            @tagName(token.id),
-        );
-    }
-
     fn parse_label_decl(self: *ParseContext) ?LabelDecl {
         const initial_loc = self.current_token;
         const symbol = self.eat_token_if(.Symbol) orelse return null;
