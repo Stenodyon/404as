@@ -177,10 +177,31 @@ const ParseContext = struct {
 
     fn parse_addsub_expr(self: *ParseContext) !?*Expression {
         const initial_loc = self.current_token;
-        const lhs = (try self.parse_term()) orelse return null;
+        const lhs = (try self.parse_muldiv_expr()) orelse return null;
         const operator: Binop = blk: {
             if (self.eat_token_if(.Plus)) |_| break :blk Binop.Add;
             if (self.eat_token_if(.Minus)) |_| break :blk Binop.Sub;
+            return lhs;
+        };
+        const rhs = (try self.parse_muldiv_expr()) orelse {
+            self.current_token = initial_loc;
+            return null;
+        };
+        return try self.push_expression(Expression{
+            .Binop = ExprBinop{
+                .lhs = lhs,
+                .rhs = rhs,
+                .op = operator,
+            },
+        });
+    }
+
+    fn parse_muldiv_expr(self: *ParseContext) !?*Expression {
+        const initial_loc = self.current_token;
+        const lhs = (try self.parse_term()) orelse return null;
+        const operator: Binop = blk: {
+            if (self.eat_token_if(.Asterisk)) |_| break :blk Binop.Mul;
+            if (self.eat_token_if(.Slash)) |_| break :blk Binop.Div;
             return lhs;
         };
         const rhs = (try self.parse_term()) orelse {

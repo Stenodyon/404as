@@ -1,3 +1,4 @@
+reset:
     JMP start
 start:
-    JMP start - 4
+    JMP start + 3 * 4
