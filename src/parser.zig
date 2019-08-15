@@ -178,7 +178,64 @@ const ParseContext = struct {
     }
 
     fn parse_expression(self: *ParseContext) ExprError!?*Expression {
-        return try self.parse_shift_expr();
+        return try self.parse_bitwiseOR();
+    }
+
+    fn parse_bitwiseOR(self: *ParseContext) !?*Expression {
+        const lhs = (try self.parse_bitwiseXOR()) orelse return null;
+        const operator_token = self.eat_token_if(.Pipe) orelse return lhs;
+        const rhs = (try self.parse_bitwiseXOR()) orelse {
+            fail(
+                operator_token.loc,
+                "expected expression after '{}'\n",
+                operator_token.contents,
+            );
+        };
+        return try self.push_expression(Expression{
+            .Binop = ExprBinop{
+                .lhs = lhs,
+                .rhs = rhs,
+                .op = Binop.OR,
+            },
+        });
+    }
+
+    fn parse_bitwiseXOR(self: *ParseContext) !?*Expression {
+        const lhs = (try self.parse_bitwiseAND()) orelse return null;
+        const operator_token = self.eat_token_if(.Caret) orelse return lhs;
+        const rhs = (try self.parse_bitwiseAND()) orelse {
+            fail(
+                operator_token.loc,
+                "expected expression after '{}'\n",
+                operator_token.contents,
+            );
+        };
+        return try self.push_expression(Expression{
+            .Binop = ExprBinop{
+                .lhs = lhs,
+                .rhs = rhs,
+                .op = Binop.XOR,
+            },
+        });
+    }
+
+    fn parse_bitwiseAND(self: *ParseContext) !?*Expression {
+        const lhs = (try self.parse_shift_expr()) orelse return null;
+        const operator_token = self.eat_token_if(.Ampersand) orelse return lhs;
+        const rhs = (try self.parse_shift_expr()) orelse {
+            fail(
+                operator_token.loc,
+                "expected expression after '{}'\n",
+                operator_token.contents,
+            );
+        };
+        return try self.push_expression(Expression{
+            .Binop = ExprBinop{
+                .lhs = lhs,
+                .rhs = rhs,
+                .op = Binop.AND,
+            },
+        });
     }
 
     fn parse_shift_expr(self: *ParseContext) !?*Expression {
