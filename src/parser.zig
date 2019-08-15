@@ -177,8 +177,39 @@ const ParseContext = struct {
         return self.expressions.at(self.expressions.count() - 1);
     }
 
+    fn parse_expression(self: *ParseContext) ExprError!?*Expression {
+        return try self.parse_shift_expr();
+    }
+
+    fn parse_shift_expr(self: *ParseContext) !?*Expression {
+        const lhs = (try self.parse_addsub_expr()) orelse return null;
+        const operator_token = blk: {
+            if (self.eat_token_if(.ShiftLeft)) |token| break :blk token;
+            if (self.eat_token_if(.ShiftRight)) |token| break :blk token;
+            return lhs;
+        };
+        const operator: Binop = switch (operator_token.id) {
+            .ShiftLeft => Binop.ShiftLeft,
+            .ShiftRight => Binop.ShiftRight,
+            else => unreachable,
+        };
+        const rhs = (try self.parse_addsub_expr()) orelse {
+            fail(
+                operator_token.loc,
+                "expected expression after '{}'\n",
+                operator_token.contents,
+            );
+        };
+        return try self.push_expression(Expression{
+            .Binop = ExprBinop{
+                .lhs = lhs,
+                .rhs = rhs,
+                .op = operator,
+            },
+        });
+    }
+
     fn parse_addsub_expr(self: *ParseContext) !?*Expression {
-        const initial_loc = self.current_token;
         const lhs = (try self.parse_muldiv_expr()) orelse return null;
         const operator_token = blk: {
             if (self.eat_token_if(.Plus)) |token| break :blk token;
@@ -207,7 +238,6 @@ const ParseContext = struct {
     }
 
     fn parse_muldiv_expr(self: *ParseContext) !?*Expression {
-        const initial_loc = self.current_token;
         const lhs = (try self.parse_neg_expr()) orelse return null;
         const operator_token = blk: {
             if (self.eat_token_if(.Asterisk)) |token| break :blk token;
@@ -239,14 +269,14 @@ const ParseContext = struct {
         const operator_token = blk: {
             if (self.eat_token_if(.Minus)) |token| break :blk token;
             if (self.eat_token_if(.Tilda)) |token| break :blk token;
-            return try self.parse_term();
+            return try self.parse_access_expr();
         };
         const operator = switch (operator_token.id) {
             .Minus => Unop.Neg,
             .Tilda => Unop.NOT,
             else => unreachable,
         };
-        const expr = (try self.parse_term()) orelse {
+        const expr = (try self.parse_access_expr()) orelse {
             fail(
                 operator_token.loc,
                 "expected expression after '{}'\n",
@@ -257,6 +287,21 @@ const ParseContext = struct {
             .Unop = ExprUnop{
                 .expr = expr,
                 .op = operator,
+            },
+        });
+    }
+
+    fn parse_access_expr(self: *ParseContext) !?*Expression {
+        const expr = (try self.parse_term()) orelse return null;
+        const bracket = self.eat_token_if(.SquareBracketOpen) orelse {
+            return expr;
+        };
+        const offset = self.expect_token(.Number);
+        _ = self.expect_token(.SquareBracketClose);
+        return try self.push_expression(Expression{
+            .ArrayAccess = ExprArrayAccess{
+                .expr = expr,
+                .offset = offset.number_value,
             },
         });
     }
@@ -276,10 +321,6 @@ const ParseContext = struct {
             return expr;
         }
         return null;
-    }
-
-    fn parse_expression(self: *ParseContext) ExprError!?*Expression {
-        return try self.parse_addsub_expr();
     }
 
     fn parse_label_decl(self: *ParseContext) ?LabelDecl {

@@ -16,6 +16,8 @@ pub const TokenId = enum {
     Pipe,
     Caret,
     Tilda,
+    ShiftLeft,
+    ShiftRight,
     ParenOpen,
     ParenClose,
     SquareBracketOpen,
@@ -45,6 +47,8 @@ const TokenizeState = enum {
     Number,
     BinNumber,
     HexNumber,
+    Gt,
+    Lt,
 };
 
 const Tokenize = struct {
@@ -210,6 +214,14 @@ pub fn tokenize(
                         try t.begin_token(.SquareBracketClose);
                         t.end_token();
                     },
+                    '<' => {
+                        try t.begin_token(.ShiftLeft);
+                        t.state = .Lt;
+                    },
+                    '>' => {
+                        try t.begin_token(.ShiftRight);
+                        t.state = .Gt;
+                    },
                     else => {
                         var buffer: [@sizeOf(u32)]u8 = undefined;
                         const size = try std.unicode.utf8Encode(c, buffer[0..]);
@@ -306,6 +318,32 @@ pub fn tokenize(
                         t.revert_char();
                         t.end_token();
                         t.state = .Start;
+                    },
+                }
+            },
+            .Gt => {
+                switch (c) {
+                    '>' => {
+                        t.end_token();
+                        t.state = .Start;
+                    },
+                    else => {
+                        var buffer: [@sizeOf(u32)]u8 = undefined;
+                        const size = try std.unicode.utf8Encode(c, buffer[0..]);
+                        t.fail("invalid character '{}', expected '>'\n", buffer[0..size]);
+                    },
+                }
+            },
+            .Lt => {
+                switch (c) {
+                    '<' => {
+                        t.end_token();
+                        t.state = .Start;
+                    },
+                    else => {
+                        var buffer: [@sizeOf(u32)]u8 = undefined;
+                        const size = try std.unicode.utf8Encode(c, buffer[0..]);
+                        t.fail("invalid character '{}', expected '<'\n", buffer[0..size]);
                     },
                 }
             },

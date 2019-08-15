@@ -34,6 +34,8 @@ pub const Binop = enum {
     Sub,
     Mul,
     Div,
+    ShiftLeft,
+    ShiftRight,
     AND,
     OR,
     XOR,
@@ -114,11 +116,11 @@ pub const Expression = union(enum) {
                 }
             },
             .Binop => |binop_expr| {
-                const a = switch (binop_expr.rhs.eval(labels, location)) {
+                const a = switch (binop_expr.lhs.eval(labels, location)) {
                     .ReturnValue => |val| val,
                     else => unreachable,
                 };
-                const b = switch (binop_expr.lhs.eval(labels, location)) {
+                const b = switch (binop_expr.rhs.eval(labels, location)) {
                     .ReturnValue => |val| val,
                     else => unreachable,
                 };
@@ -127,6 +129,12 @@ pub const Expression = union(enum) {
                     .Sub => return Expression{ .ReturnValue = a -% b },
                     .Mul => return Expression{ .ReturnValue = a * b },
                     .Div => return Expression{ .ReturnValue = a / b },
+                    .ShiftLeft => return Expression{
+                        .ReturnValue = a << @intCast(u6, b),
+                    },
+                    .ShiftRight => return Expression{
+                        .ReturnValue = a >> @intCast(u6, b),
+                    },
                     .AND => return Expression{ .ReturnValue = a & b },
                     .OR => return Expression{ .ReturnValue = a | b },
                     .XOR => return Expression{ .ReturnValue = a ^ b },
@@ -241,7 +249,7 @@ test "Expression.evaluate Unop.NOT" {
 fn test_binop(op: Binop) void {
     const labels = LabelMap.init(std.debug.global_allocator);
     const value1 = 47219074;
-    const value2 = 123;
+    const value2 = 15;
     const a = Expression{
         .Literal = ExprLiteral{
             .loc = SourceLoc.init("test"),
@@ -268,6 +276,8 @@ fn test_binop(op: Binop) void {
         .Sub => usize(value1) - value2,
         .Mul => usize(value1) * value2,
         .Div => usize(value1) / value2,
+        .ShiftLeft => usize(value1) << value2,
+        .ShiftRight => usize(value1) >> value2,
         .AND => usize(value1) & value2,
         .OR => usize(value1) | value2,
         .XOR => usize(value1) ^ value2,
@@ -290,6 +300,14 @@ test "Expression.evaluate Binop.Mul" {
 
 test "Expression.evaluate Binop.Div" {
     test_binop(.Div);
+}
+
+test "Expression.evaluate Binop.ShiftLeft" {
+    test_binop(.ShiftLeft);
+}
+
+test "Expression.evaluate Binop.ShiftRight" {
+    test_binop(.ShiftRight);
 }
 
 test "Expression.evaluate Binop.AND" {
