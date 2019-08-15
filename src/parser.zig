@@ -125,6 +125,11 @@ const ParseContext = struct {
         }
     }
 
+    fn push_expression(self: *ParseContext, expr: Expression) !*Expression {
+        try self.expressions.push(expr);
+        return self.expressions.at(self.expressions.count() - 1);
+    }
+
     fn parse_register(self: *ParseContext) Register {
         const symbol = self.expect_token(.Symbol);
         if (streqi("A", symbol.contents)) {
@@ -170,10 +175,35 @@ const ParseContext = struct {
         return self.expressions.at(self.expressions.count() - 1);
     }
 
-    fn parse_expression(self: *ParseContext) !?*Expression {
+    fn parse_addsub_expr(self: *ParseContext) !?*Expression {
+        const initial_loc = self.current_token;
+        const lhs = (try self.parse_term()) orelse return null;
+        const operator: Binop = blk: {
+            if (self.eat_token_if(.Plus)) |_| break :blk Binop.Add;
+            if (self.eat_token_if(.Minus)) |_| break :blk Binop.Sub;
+            return lhs;
+        };
+        const rhs = (try self.parse_term()) orelse {
+            self.current_token = initial_loc;
+            return null;
+        };
+        return try self.push_expression(Expression{
+            .Binop = ExprBinop{
+                .lhs = lhs,
+                .rhs = rhs,
+                .op = operator,
+            },
+        });
+    }
+
+    fn parse_term(self: *ParseContext) !?*Expression {
         if (try self.parse_number()) |number| return number;
         if (try self.parse_label()) |label| return label;
         return null;
+    }
+
+    fn parse_expression(self: *ParseContext) !?*Expression {
+        return try self.parse_addsub_expr();
     }
 
     fn parse_label_decl(self: *ParseContext) ?LabelDecl {
