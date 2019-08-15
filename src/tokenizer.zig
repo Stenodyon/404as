@@ -12,17 +12,6 @@ pub const TokenId = enum {
     Number,
     Comment,
     Newline,
-
-    pub fn to_string(self: TokenId) []const u8 {
-        switch (self) {
-            .Comma => return "COMMA",
-            .Colon => return "COLON",
-            .Symbol => return "SYMBOL",
-            .Number => return "NUMBER",
-            .Comment => return "COMMENT",
-            .Newline => return "NEWLINE",
-        }
-    }
 };
 
 pub const Token = struct {

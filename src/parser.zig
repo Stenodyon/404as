@@ -75,8 +75,8 @@ const ParseContext = struct {
             found.loc.filename,
             found.loc.row,
             found.loc.col,
-            expected.to_string(),
-            found.id.to_string(),
+            @tagName(expected),
+            @tagName(found.id),
         );
         std.process.exit(1);
     }
@@ -166,7 +166,7 @@ const ParseContext = struct {
         fail(
             token.loc,
             "expected NUMBER or LABEL, found {}\n",
-            token.id.to_string(),
+            @tagName(token.id),
         );
     }
 
