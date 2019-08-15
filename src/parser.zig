@@ -178,14 +178,22 @@ const ParseContext = struct {
     fn parse_addsub_expr(self: *ParseContext) !?*Expression {
         const initial_loc = self.current_token;
         const lhs = (try self.parse_muldiv_expr()) orelse return null;
-        const operator: Binop = blk: {
-            if (self.eat_token_if(.Plus)) |_| break :blk Binop.Add;
-            if (self.eat_token_if(.Minus)) |_| break :blk Binop.Sub;
+        const operator_token = blk: {
+            if (self.eat_token_if(.Plus)) |token| break :blk token;
+            if (self.eat_token_if(.Minus)) |token| break :blk token;
             return lhs;
         };
+        const operator: Binop = switch (operator_token.id) {
+            .Plus => Binop.Add,
+            .Minus => Binop.Sub,
+            else => unreachable,
+        };
         const rhs = (try self.parse_muldiv_expr()) orelse {
-            self.current_token = initial_loc;
-            return null;
+            fail(
+                operator_token.loc,
+                "expected expression after '{}'\n",
+                operator_token.contents,
+            );
         };
         return try self.push_expression(Expression{
             .Binop = ExprBinop{
@@ -199,14 +207,22 @@ const ParseContext = struct {
     fn parse_muldiv_expr(self: *ParseContext) !?*Expression {
         const initial_loc = self.current_token;
         const lhs = (try self.parse_term()) orelse return null;
-        const operator: Binop = blk: {
-            if (self.eat_token_if(.Asterisk)) |_| break :blk Binop.Mul;
-            if (self.eat_token_if(.Slash)) |_| break :blk Binop.Div;
+        const operator_token = blk: {
+            if (self.eat_token_if(.Asterisk)) |token| break :blk token;
+            if (self.eat_token_if(.Slash)) |token| break :blk token;
             return lhs;
         };
+        const operator: Binop = switch (operator_token.id) {
+            .Asterisk => Binop.Mul,
+            .Slash => Binop.Div,
+            else => unreachable,
+        };
         const rhs = (try self.parse_term()) orelse {
-            self.current_token = initial_loc;
-            return null;
+            fail(
+                operator_token.loc,
+                "expected expression after '{}'\n",
+                operator_token.contents,
+            );
         };
         return try self.push_expression(Expression{
             .Binop = ExprBinop{
